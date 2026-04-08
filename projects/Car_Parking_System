@@ -1,0 +1,122 @@
+#include <ESP32Servo.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+#define IR_GATE 14
+#define IR_ENTRY 27
+#define IR_EXIT 26
+
+#define SERVO_ENTRY 13
+#define SERVO_EXIT 12
+
+Servo entryServo;
+Servo exitServo;
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+int totalSlots = 5;
+int availableSlots = 5;
+
+bool entryDetected = false;
+bool exitDetected = false;
+
+// Entry gate timing
+bool entryGateOpen = false;
+unsigned long entryGateTime = 0;
+
+// Exit gate timing
+bool exitGateOpen = false;
+unsigned long exitGateTime = 0;
+
+const unsigned long gateDelay = 2000;
+
+void setup() {
+
+  Serial.begin(115200);
+
+  pinMode(IR_GATE, INPUT);
+  pinMode(IR_ENTRY, INPUT);
+  pinMode(IR_EXIT, INPUT);
+
+  // Servo setup
+  entryServo.setPeriodHertz(50);
+  entryServo.attach(SERVO_ENTRY, 500, 2400);
+  entryServo.write(0);
+
+  exitServo.setPeriodHertz(50);
+  exitServo.attach(SERVO_EXIT, 500, 2400);
+  exitServo.write(0);
+
+  // I2C LCD
+  Wire.begin(21, 22);
+  lcd.init();
+  lcd.backlight();
+
+  updateDisplay();
+}
+
+void loop() {
+
+  // -------- ENTRY GATE --------
+  if (digitalRead(IR_GATE) == LOW && !entryGateOpen) {
+    entryServo.write(90);
+    entryGateOpen = true;
+    entryGateTime = millis();
+  }
+
+  if (entryGateOpen && millis() - entryGateTime >= gateDelay) {
+    entryServo.write(0);
+    entryGateOpen = false;
+  }
+
+  // -------- ENTRY COUNT --------
+  if (digitalRead(IR_ENTRY) == LOW && !entryDetected) {
+    if (availableSlots > 0) {
+      availableSlots--;
+      updateDisplay();
+    }
+    entryDetected = true;
+  }
+
+  if (digitalRead(IR_ENTRY) == HIGH) {
+    entryDetected = false;
+  }
+
+  // -------- EXIT GATE --------
+  if (digitalRead(IR_EXIT) == LOW && !exitGateOpen) {
+    exitServo.write(90);
+    exitGateOpen = true;
+    exitGateTime = millis();
+  }
+
+  if (exitGateOpen && millis() - exitGateTime >= gateDelay) {
+    exitServo.write(0);
+    exitGateOpen = false;
+  }
+
+  // -------- EXIT COUNT --------
+  if (digitalRead(IR_EXIT) == LOW && !exitDetected) {
+    if (availableSlots < totalSlots) {
+      availableSlots++;
+      updateDisplay();
+    }
+    exitDetected = true;
+  }
+
+  if (digitalRead(IR_EXIT) == HIGH) {
+    exitDetected = false;
+  }
+
+  delay(50);
+}
+
+void updateDisplay() {
+  lcd.clear();
+
+  lcd.setCursor(0, 0);
+  lcd.print("Smart Parking");
+
+  lcd.setCursor(0, 1);
+  lcd.print("Available: ");
+  lcd.print(availableSlots);
+}
